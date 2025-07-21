@@ -1,0 +1,14 @@
+theme_index = 0
+default_tab = 0
+image_quality = "medium"
+clipboard_history_size = 10
+emoji_categories_enabled = [
+    "Smileys",
+    "Animals",
+    "Food",
+    "Activities",
+    "Travel",
+    "Nature",
+    "Objects",
+    "Symbols",
+]
