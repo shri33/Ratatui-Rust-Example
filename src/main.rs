@@ -12,11 +12,10 @@ use ratatui::{
     layout::{Constraint, Direction, Layout},
     style::{Color, Modifier, Style},
     text::{Line, Span, Text},
-    widgets::{Block, Borders, Paragraph, Table, Row, Cell},
+    widgets::{Block, Borders, Paragraph, Table, Row},
     Terminal,
 };
 use arboard::Clipboard;
-use open;
 use std::fs;
 
 /// Application modes
@@ -114,8 +113,8 @@ impl App {
 
 /// Helper to display a high-res image using viuer
 fn display_high_res_image(path: &str) -> Result<(), Box<dyn std::error::Error>> {
-    if !fs::metadata(path).is_ok() {
-        println!("Image file '{}' not found. Please provide a valid image.", path);
+    if fs::metadata(path).is_err() {
+        println!("Image file '{path}' not found. Please provide a valid image.");
         return Ok(());
     }
     disable_raw_mode()?;
@@ -142,7 +141,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     loop {
         terminal.draw(|f| {
-            let size = f.size();
+            let size = f.area();
             let chunks = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints([
@@ -181,7 +180,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     f.render_widget(content, chunks[1]);
                 }
                 Mode::Input => {
-                    let mut text = Text::from(vec![
+                    let text = Text::from(vec![
                         Line::from(vec![
                             Span::styled("Input: ", Style::default().fg(Color::Green)),
                             Span::raw(&app.input),
