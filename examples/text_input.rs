@@ -1,22 +1,32 @@
-//! Text input example with clipboard support
+//! Text input example with clickable links and URL detection
 //!
-//! Demonstrates text input fields with editing capabilities.
+//! Demonstrates text input fields with link detection and interaction.
 
 use arboard::Clipboard;
 use crossterm::{
-    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyModifiers},
+    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyModifiers, MouseButton, MouseEvent, MouseEventKind},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use ratatui::{
     backend::CrosstermBackend,
     layout::{Constraint, Direction, Layout, Rect},
-    style::{Color, Style},
+    style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Paragraph},
+    widgets::{Block, Borders, List, ListItem, Paragraph},
     Frame, Terminal,
 };
+use regex::Regex;
 use std::io;
+use std::process::Command;
+
+#[derive(Clone, Debug)]
+struct Link {
+    text: String,
+    url: String,
+    start: usize,
+    end: usize,
+}
 
 #[derive(Clone)]
 struct TextField {
@@ -24,6 +34,7 @@ struct TextField {
     cursor_position: usize,
     label: String,
     is_focused: bool,
+    links: Vec<Link>,
 }
 
 impl TextField {
@@ -33,6 +44,7 @@ impl TextField {
             cursor_position: 0,
             label: label.to_string(),
             is_focused: false,
+            links: Vec::new(),
         }
     }
 
@@ -59,11 +71,13 @@ impl TextField {
     fn insert_char(&mut self, c: char) {
         self.content.insert(self.cursor_position, c);
         self.cursor_position += 1;
+        self.detect_links();
     }
 
     fn delete_char(&mut self) {
         if self.cursor_position < self.content.len() {
             self.content.remove(self.cursor_position);
+            self.detect_links();
         }
     }
 
@@ -71,7 +85,43 @@ impl TextField {
         if self.cursor_position > 0 {
             self.cursor_position -= 1;
             self.content.remove(self.cursor_position);
+            self.detect_links();
         }
+    }
+
+    fn detect_links(&mut self) {
+        self.links.clear();
+        
+        // URL regex pattern
+        let url_regex = Regex::new(r"https?://[^\s]+").unwrap();
+        
+        for mat in url_regex.find_iter(&self.content) {
+            self.links.push(Link {
+                text: mat.as_str().to_string(),
+                url: mat.as_str().to_string(),
+                start: mat.start(),
+                end: mat.end(),
+            });
+        }
+
+        // Email regex pattern
+        let email_regex = Regex::new(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b").unwrap();
+        
+        for mat in email_regex.find_iter(&self.content) {
+            self.links.push(Link {
+                text: mat.as_str().to_string(),
+                url: format!("mailto:{}", mat.as_str()),
+                start: mat.start(),
+                end: mat.end(),
+            });
+        }
+
+        // Sort links by start position
+        self.links.sort_by_key(|link| link.start);
+    }
+
+    fn get_link_at_position(&self, pos: usize) -> Option<&Link> {
+        self.links.iter().find(|link| pos >= link.start && pos < link.end)
     }
 
     fn render(&self, frame: &mut Frame, area: Rect) {
@@ -86,64 +136,85 @@ impl TextField {
         };
 
         let block = block.style(block_style);
-
-        // Calculate visible content
         let inner_area = block.inner(area);
-        let width = inner_area.width as usize;
 
-        // Create visible text with cursor
-        let mut display_content = self.content.clone();
+        // Create styled content with links highlighted
+        let mut spans = Vec::new();
+        let mut last_end = 0;
 
-        // Ensure we display the part with the cursor if content is longer than width
-        let content_len = display_content.chars().count();
-        let start_pos = if width > 0 && content_len > width - 1 {
-            let start = self.cursor_position.saturating_sub(width / 2);
-            let end = start + width - 1;
-            if end >= content_len {
-                content_len.saturating_sub(width - 1)
-            } else {
-                start
+        for link in &self.links {
+            // Add text before the link
+            if link.start > last_end {
+                let text = &self.content[last_end..link.start];
+                spans.push(Span::raw(text));
             }
-        } else {
-            0
-        };
 
-        // Slice the content for display
-        if start_pos > 0 {
-            display_content = display_content
-                .chars()
-                .skip(start_pos)
-                .take(width - 1)
-                .collect();
-        } else if content_len > width - 1 {
-            display_content = display_content.chars().take(width - 1).collect();
+            // Add the link with special styling
+            spans.push(Span::styled(
+                &link.text,
+                Style::default()
+                    .fg(Color::Blue)
+                    .add_modifier(Modifier::UNDERLINED)
+                    .add_modifier(Modifier::BOLD),
+            ));
+
+            last_end = link.end;
         }
 
-        // Calculate cursor position in the visible area
-        let cursor_pos_visible = self.cursor_position.saturating_sub(start_pos);
+        // Add remaining text after the last link
+        if last_end < self.content.len() {
+            spans.push(Span::raw(&self.content[last_end..]));
+        }
 
-        // Create line with cursor
-        let mut line_content = Vec::new();
-        for (i, c) in display_content.chars().enumerate() {
-            if i == cursor_pos_visible && self.is_focused {
-                line_content.push(Span::styled(
-                    c.to_string(),
+        // Add cursor if focused
+        if self.is_focused {
+            // Find where to insert cursor
+            let cursor_inserted = false;
+            let mut new_spans = Vec::new();
+            let mut pos = 0;
+
+            for span in &spans {
+                let span_text = span.content.as_ref();
+                let span_len = span_text.chars().count();
+                
+                if pos + span_len > self.cursor_position && !cursor_inserted {
+                    // Split the span at cursor position
+                    let rel_pos = self.cursor_position - pos;
+                    let before: String = span_text.chars().take(rel_pos).collect();
+                    let at_cursor = span_text.chars().nth(rel_pos).unwrap_or(' ');
+                    let after: String = span_text.chars().skip(rel_pos + 1).collect();
+
+                    if !before.is_empty() {
+                        new_spans.push(Span::styled(before, span.style));
+                    }
+                    
+                    new_spans.push(Span::styled(
+                        at_cursor.to_string(),
+                        Style::default().fg(Color::Black).bg(Color::White),
+                    ));
+                    
+                    if !after.is_empty() {
+                        new_spans.push(Span::styled(after, span.style));
+                    }
+                } else {
+                    new_spans.push(span.clone());
+                }
+                
+                pos += span_len;
+            }
+
+            // If cursor is at the end
+            if self.cursor_position >= self.content.chars().count() {
+                new_spans.push(Span::styled(
+                    " ",
                     Style::default().fg(Color::Black).bg(Color::White),
                 ));
-            } else {
-                line_content.push(Span::raw(c.to_string()));
             }
+
+            spans = new_spans;
         }
 
-        // Add cursor at the end if needed
-        if cursor_pos_visible == display_content.len() && self.is_focused {
-            line_content.push(Span::styled(
-                " ",
-                Style::default().fg(Color::Black).bg(Color::White),
-            ));
-        }
-
-        let line = Line::from(line_content);
+        let line = Line::from(spans);
         let text = Paragraph::new(line).style(Style::default().fg(Color::White));
 
         frame.render_widget(block, area);
@@ -172,6 +243,7 @@ struct InputApp {
     active_field: usize,
     should_quit: bool,
     status_message: String,
+    detected_links: Vec<String>,
 }
 
 impl InputApp {
@@ -179,8 +251,8 @@ impl InputApp {
         let mut fields = vec![
             TextField::new("Username"),
             TextField::new("Email"),
-            TextField::new("Password"),
-            TextField::new("Notes"),
+            TextField::new("Website (try: https://example.com)"),
+            TextField::new("Notes (try adding URLs or emails)"),
         ];
         fields[0].is_focused = true;
 
@@ -189,8 +261,9 @@ impl InputApp {
             active_field: 0,
             should_quit: false,
             status_message: String::from(
-                "Tab to switch fields, Enter to submit, Ctrl+C/Ctrl+V for clipboard, q to quit",
+                "Tab to switch fields, Ctrl+L to open links, Ctrl+C/V clipboard, q to quit"
             ),
+            detected_links: Vec::new(),
         }
     }
 
@@ -198,6 +271,7 @@ impl InputApp {
         self.fields[self.active_field].is_focused = false;
         self.active_field = (self.active_field + 1) % self.fields.len();
         self.fields[self.active_field].is_focused = true;
+        self.update_detected_links();
     }
 
     fn previous_field(&mut self) {
@@ -208,6 +282,58 @@ impl InputApp {
             self.active_field = self.fields.len() - 1;
         }
         self.fields[self.active_field].is_focused = true;
+        self.update_detected_links();
+    }
+
+    fn update_detected_links(&mut self) {
+        self.detected_links.clear();
+        for field in &self.fields {
+            for link in &field.links {
+                self.detected_links.push(format!("{}: {}", field.label, link.url));
+            }
+        }
+    }
+
+    fn open_links(&mut self) {
+        let field = &self.fields[self.active_field];
+        if field.links.is_empty() {
+            self.status_message = "No links found in current field".to_string();
+            return;
+        }
+
+        let link = &field.links[0]; // Open first link found
+        
+        #[cfg(target_os = "windows")]
+        let result = Command::new("cmd").args(&["/c", "start", &link.url]).spawn();
+        
+        #[cfg(target_os = "macos")]
+        let result = Command::new("open").arg(&link.url).spawn();
+        
+        #[cfg(target_os = "linux")]
+        let result = Command::new("xdg-open").arg(&link.url).spawn();
+
+        match result {
+            Ok(_) => self.status_message = format!("Opening: {}", link.url),
+            Err(e) => self.status_message = format!("Failed to open link: {}", e),
+        }
+    }
+
+    fn handle_mouse_click(&mut self, x: u16, y: u16) {
+        // Simple click handling - in a real implementation you'd need to map
+        // screen coordinates to text positions more accurately
+        self.status_message = format!("Mouse clicked at ({}, {})", x, y);
+        
+        // For demonstration, try to activate the field that was clicked
+        if y >= 4 && y <= 6 && self.fields.len() > 0 {
+            self.fields[self.active_field].is_focused = false;
+            self.active_field = 0;
+            self.fields[self.active_field].is_focused = true;
+        } else if y >= 7 && y <= 9 && self.fields.len() > 1 {
+            self.fields[self.active_field].is_focused = false;
+            self.active_field = 1;
+            self.fields[self.active_field].is_focused = true;
+        }
+        // Add more field mappings as needed
     }
 
     fn submit(&mut self) {
@@ -216,6 +342,7 @@ impl InputApp {
             values.push(format!("{}: {}", field.label, field.content));
         }
         self.status_message = format!("Submitted: {}", values.join(", "));
+        self.update_detected_links();
     }
 
     fn on_key(&mut self, key: event::KeyEvent) -> Result<(), Box<dyn std::error::Error>> {
@@ -232,6 +359,9 @@ impl InputApp {
             (KeyCode::Enter, _) => {
                 self.submit();
             }
+            (KeyCode::Char('l'), KeyModifiers::CONTROL) => {
+                self.open_links();
+            }
             (KeyCode::Char('c'), KeyModifiers::CONTROL) => {
                 self.fields[self.active_field].copy_to_clipboard()?;
                 self.status_message = "Copied to clipboard".to_string();
@@ -239,9 +369,11 @@ impl InputApp {
             (KeyCode::Char('v'), KeyModifiers::CONTROL) => {
                 self.fields[self.active_field].paste_from_clipboard()?;
                 self.status_message = "Pasted from clipboard".to_string();
+                self.update_detected_links();
             }
             (KeyCode::Char(c), _) => {
                 self.fields[self.active_field].insert_char(c);
+                self.update_detected_links();
             }
             (KeyCode::Left, _) => {
                 self.fields[self.active_field].move_cursor_left();
@@ -257,13 +389,24 @@ impl InputApp {
             }
             (KeyCode::Backspace, _) => {
                 self.fields[self.active_field].backspace();
+                self.update_detected_links();
             }
             (KeyCode::Delete, _) => {
                 self.fields[self.active_field].delete_char();
+                self.update_detected_links();
             }
             _ => {}
         }
         Ok(())
+    }
+
+    fn on_mouse(&mut self, mouse: MouseEvent) {
+        match mouse.kind {
+            MouseEventKind::Down(MouseButton::Left) => {
+                self.handle_mouse_click(mouse.column, mouse.row);
+            }
+            _ => {}
+        }
     }
 
     fn render(&self, frame: &mut Frame) {
@@ -275,13 +418,13 @@ impl InputApp {
                 Constraint::Length(3), // Field 2
                 Constraint::Length(3), // Field 3
                 Constraint::Length(6), // Field 4 (notes, taller)
-                Constraint::Min(0),    // Spacing
+                Constraint::Min(3),    // Links panel
                 Constraint::Length(3), // Status
             ])
             .split(frame.area());
 
         // Title
-        let title = Paragraph::new("✏️ Text Input Example with Clipboard Support")
+        let title = Paragraph::new("🔗 Text Input with Clickable Links")
             .block(Block::default().borders(Borders::ALL))
             .style(Style::default().fg(Color::Cyan));
         frame.render_widget(title, chunks[0]);
@@ -290,6 +433,17 @@ impl InputApp {
         for (i, field) in self.fields.iter().enumerate() {
             field.render(frame, chunks[i + 1]);
         }
+
+        // Links panel
+        let link_items: Vec<ListItem> = self.detected_links
+            .iter()
+            .map(|link| ListItem::new(link.as_str()))
+            .collect();
+
+        let links_list = List::new(link_items)
+            .block(Block::default().borders(Borders::ALL).title("Detected Links"))
+            .style(Style::default().fg(Color::Green));
+        frame.render_widget(links_list, chunks[5]);
 
         // Status bar
         let status = Paragraph::new(self.status_message.as_str())
@@ -314,10 +468,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     loop {
         terminal.draw(|f| app.render(f))?;
 
-        if let Event::Key(key) = event::read()? {
-            if let Err(e) = app.on_key(key) {
-                app.status_message = format!("Error: {}", e);
+        match event::read()? {
+            Event::Key(key) => {
+                if let Err(e) = app.on_key(key) {
+                    app.status_message = format!("Error: {}", e);
+                }
             }
+            Event::Mouse(mouse) => {
+                app.on_mouse(mouse);
+            }
+            _ => {}
         }
 
         if app.should_quit {
