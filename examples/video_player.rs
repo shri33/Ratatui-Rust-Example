@@ -13,6 +13,7 @@ use ratatui::{
 use std::io;
 use std::time::Duration;
 
+// Only include FFmpeg dependencies when the 'video' feature is enabled
 #[cfg(feature = "video")]
 use ffmpeg_next as ffmpeg;
 #[cfg(feature = "video")]
@@ -257,8 +258,29 @@ impl VideoPlayerApp {
             "No video loaded. Press 'o' to open a video file.".to_string()
         };
         #[cfg(not(feature = "video"))]
-        let content_text =
-            "FFmpeg support is not enabled. Compile with --features=video".to_string();
+        let content_text = "
+        ╭─────────────────────────────────────────────────────────────╮
+        │                                                             │
+        │               FFmpeg support is not enabled                 │
+        │                                                             │
+        │    This example requires FFmpeg to be properly installed    │
+        │    and the project to be compiled with --features=video     │
+        │                                                             │
+        │    Installation steps:                                      │
+        │                                                             │
+        │    Windows:                                                 │
+        │    1. Download from ffmpeg.org                              │
+        │    2. Add to PATH                                           │
+        │    3. Set PKG_CONFIG_PATH environment variable              │
+        │                                                             │
+        │    OR use vcpkg:                                            │
+        │    vcpkg install ffmpeg:x64-windows                         │
+        │    vcpkg integrate install                                  │
+        │                                                             │
+        │    Then run: cargo run --example video_player --features=video │
+        │                                                             │
+        ╰─────────────────────────────────────────────────────────────╯
+        ".to_string();
         let content = Paragraph::new(content_text)
             .block(Block::default().borders(Borders::ALL).title("Video"))
             .style(Style::default().fg(Color::White));

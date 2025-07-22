@@ -22,6 +22,15 @@ A collection of advanced examples for the Ratatui terminal UI framework.
 - FFmpeg (only for video playback)
 - pkg-config (for building FFmpeg bindings)
 
+### Terminal Requirements for High-Resolution Images
+For the best experience with high-resolution image rendering:
+- **Windows Terminal** (Windows) - supports Kitty graphics protocol
+- **iTerm2** (macOS) - fully supports inline images
+- **Kitty** (Linux/macOS) - best support for high-resolution images
+- **Alacritty** (all platforms) - limited support, ASCII art fallback
+
+> **Note:** The image_viewer example can toggle between ASCII art mode and high-resolution mode by pressing 'h'. If your terminal doesn't support the graphics protocol, it will fall back to ASCII art.
+
 ## Running the Examples Without FFmpeg
 
 If you don't have FFmpeg installed, you can still run most examples:
@@ -50,15 +59,33 @@ To run examples that use FFmpeg (video player):
 1. **Install FFmpeg**:
    
    **Windows**:
-   - Option 1: Download from [ffmpeg.org](https://ffmpeg.org/download.html) and add to PATH
-   - Option 2: Use Chocolatey: `choco install ffmpeg`
-   - Option 3: Use vcpkg: 
+   - Option 1: Download from [ffmpeg.org](https://ffmpeg.org/download.html)
+     - Extract the zip to a directory (e.g., `C:\ffmpeg`)
+     - Add the bin folder to your PATH: `C:\ffmpeg\bin`
+     - Set environment variables:
+       ```
+       setx PKG_CONFIG_PATH "C:\ffmpeg\lib\pkgconfig"
+       ```
+   
+   - Option 2: Use Chocolatey: 
+     ```
+     choco install ffmpeg
+     choco install pkgconfiglite
+     ```
+   
+   - Option 3: Use vcpkg (preferred method): 
      ```
      git clone https://github.com/Microsoft/vcpkg.git
      cd vcpkg
      .\bootstrap-vcpkg.bat
      .\vcpkg.exe install ffmpeg:x64-windows
      .\vcpkg.exe integrate install
+     setx VCPKG_ROOT "C:\path\to\your\vcpkg"
+     ```
+     
+     Then set vcpkg environment variables:
+     ```
+     setx PKG_CONFIG_PATH "%VCPKG_ROOT%\installed\x64-windows\lib\pkgconfig"
      ```
 
    **macOS**:
@@ -87,11 +114,32 @@ For the best experience with image and video rendering, use a terminal that supp
 
 ## Troubleshooting
 
+### FFmpeg Issues
+
 If you encounter build errors related to FFmpeg:
 
 1. Make sure pkg-config is installed and in your PATH
 2. Set the PKG_CONFIG_PATH environment variable to point to your FFmpeg installation
 3. Try running examples without FFmpeg using the `--no-default-features` flag
+
+Common FFmpeg errors:
+
+- **"The system library `libavutil` required by crate `ffmpeg-sys-next` was not found"**:
+  - Ensure FFmpeg is properly installed
+  - Check that PKG_CONFIG_PATH is set correctly
+  - On Windows, restart your terminal or IDE after setting environment variables
+
+- **"Could not find library in Vcpkg tree package ffmpeg is not installed"**:
+  - Ensure you've run `vcpkg install ffmpeg:x64-windows` successfully
+  - Make sure you've run `vcpkg integrate install`
+  - Set VCPKG_ROOT environment variable to your vcpkg installation path
+
+### Image Rendering Issues
+
+- **Only seeing ASCII art, not high-resolution images**:
+  - Press 'h' in the image_viewer to toggle high-resolution mode
+  - Make sure you're using a supported terminal (see Terminal Requirements)
+  - Check that your terminal has the necessary features enabled
 
 ## License
 
