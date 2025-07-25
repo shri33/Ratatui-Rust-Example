@@ -3,7 +3,7 @@
 //! Demonstrates clickable hyperlinks in the terminal using OSC 8 escape sequences.
 
 use crossterm::{
-    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode},
+    event::{self, Event, KeyCode},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -196,40 +196,49 @@ impl HyperlinkApp {
             .style(Style::default().fg(Color::Yellow));
         frame.render_widget(status, chunks[3]);
     }
+
+    #[allow(dead_code)]    #[allow(dead_code)]
+    fn validate_email(&mut self) {
+        // More comprehensive email validation
+        let email_regex = regex::Regex::new(
+            r"^([a-z0-9_+]([a-z0-9_\-\.])+[a-z0-9_]+@([a-z0-9_\-\.])+\.[a-z]{2,5}$",
+        )
+        .unwrap();
+
+        for (text, _url) in &self.links {
+            if email_regex.is_match(text) {
+                self.status_message = format!("Valid email: {}", text);
+            } else {
+                self.status_message = format!("Invalid email: {}", text);
+            }
+        }
+    }
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Setup terminal
     enable_raw_mode()?;
     let mut stdout = io::stdout();
-    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
+    execute!(stdout, EnterAlternateScreen)?;
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    // Create app
     let mut app = HyperlinkApp::new();
 
-    // Main loop
     loop {
         terminal.draw(|f| app.render(f))?;
 
-        if let Event::Key(key) = event::read()? {
-            app.on_key(key.code);
-        }
-
-        if app.should_quit {
-            break;
+        // Fix: Use proper event polling
+        if event::poll(std::time::Duration::from_millis(100))? {
+            if let Event::Key(key) = event::read()? {
+                app.on_key(key.code);
+                if key.code == KeyCode::Char('q') {
+                    break;
+                }
+            }
         }
     }
 
-    // Restore terminal
     disable_raw_mode()?;
-    execute!(
-        terminal.backend_mut(),
-        LeaveAlternateScreen,
-        DisableMouseCapture
-    )?;
-    terminal.show_cursor()?;
-
+    execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
     Ok(())
 }

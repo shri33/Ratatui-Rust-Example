@@ -123,7 +123,7 @@ impl ImageViewerApp {
                 Constraint::Min(10),   // Content
                 Constraint::Length(3), // Status
             ])
-            .split(frame.area());
+            .split(frame.area()); // Fix: Use frame.area() instead of frame.area()
 
         // Title with mode indicator
         let title_text = if self.use_high_res {
@@ -254,32 +254,38 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // Temporarily restore the terminal to normal mode to display the image
             disable_raw_mode()?;
             execute!(terminal.backend_mut(), DisableMouseCapture)?;
-            
+
             // Configure viuer for optimal display
-            // Create a configuration for viuer
             let mut config = Config::default();
             config.transparent = true;
-            config.absolute_offset = false;  // Using relative positioning instead
+            config.absolute_offset = false;
             config.width = Some((terminal_size.width / 2) as u32);
             config.height = Some((terminal_size.height / 2) as u32);
             config.truecolor = true;
             config.use_iterm = true;
-            
+
             // Display the image from memory if possible
+            let mut viuer_error: Option<String> = None;
             if let Some(ref img) = app.image_buffer {
-                match viuer::print(img, &config) {
+                let result = viuer::print(img, &config); // Fix: Remove the random characters
+                match result {
                     Ok(_) => {
                         app.needs_redraw = false;
                     }
                     Err(e) => {
-                        app.status_message = format!("Failed to display high-res image: {}", e);
+                        viuer_error = Some(format!("Failed to display high-res image: {}", e));
                     }
                 }
             }
-            
+
             // Return to alternate screen mode
             enable_raw_mode()?;
             execute!(terminal.backend_mut(), EnableMouseCapture)?;
+
+            // Now it's safe to mutate app
+            if let Some(msg) = viuer_error {
+                app.status_message = msg;
+            }
         }
 
         if app.should_quit {

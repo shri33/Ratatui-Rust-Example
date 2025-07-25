@@ -7,7 +7,7 @@ use crossterm::{
 };
 use ratatui::{
     backend::CrosstermBackend,
-    layout::{Constraint, Layout, Rect},
+    layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span, Text},
     widgets::{Block, Borders, Gauge, List, ListItem, Paragraph, Tabs},
@@ -43,16 +43,21 @@ impl DashboardApp {
             KeyCode::Char('q') => self.should_quit = true,
             KeyCode::Tab => {
                 self.tab_index = (self.tab_index + 1) % self.tabs.len();
-            }
+            },
             KeyCode::BackTab => {
                 if self.tab_index > 0 {
                     self.tab_index -= 1;
                 } else {
                     self.tab_index = self.tabs.len() - 1;
                 }
-            }
+            },
             _ => {}
         }
+    }
+
+    fn update_progress(&mut self) {
+        // Simulate progress updates
+        self.progress = (self.progress + 1) % 101;
     }
 
     fn render(&self, frame: &mut Frame) {
@@ -82,22 +87,30 @@ impl DashboardApp {
 
     fn render_overview(&self, frame: &mut Frame, area: Rect) {
         let chunks = Layout::default()
-            .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(3),
+                Constraint::Percentage(50), 
+                Constraint::Percentage(50)
+            ])
             .split(area);
 
+        // Instructions
+        self.render_instructions(frame, chunks[0]);
+        
         // Render gauge
         let gauge = Gauge::default()
             .block(Block::default().borders(Borders::ALL).title("Progress"))
             .gauge_style(Style::default().fg(Color::Green))
             .ratio(self.progress as f64 / 100.0);
-        frame.render_widget(gauge, chunks[0]);
+        frame.render_widget(gauge, chunks[1]);
 
         // Render paragraph
         let text = Text::from("This is the overview tab. It shows a high-level dashboard with key metrics and status information.");
         let paragraph = Paragraph::new(text)
             .block(Block::default().borders(Borders::ALL).title("Summary"))
             .style(Style::default().fg(Color::White));
-        frame.render_widget(paragraph, chunks[1]);
+        frame.render_widget(paragraph, chunks[2]);
     }
 
     fn render_details(&self, frame: &mut Frame, area: Rect) {
@@ -113,6 +126,13 @@ impl DashboardApp {
             .style(Style::default().fg(Color::White))
             .highlight_style(Style::default().add_modifier(Modifier::BOLD));
         frame.render_widget(list, area);
+    }
+
+    fn render_instructions(&self, frame: &mut Frame, area: Rect) {
+        let instructions = Paragraph::new("Tab: Switch tabs | Shift+Tab: Previous tab | q: Quit")
+            .block(Block::default().borders(Borders::ALL).title("Controls"))
+            .style(Style::default().fg(Color::Yellow));
+        frame.render_widget(instructions, area);
     }
 }
 
@@ -134,6 +154,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         if let Event::Key(key) = event::read()? {
             app.on_key(key.code);
         }
+
+        app.update_progress(); // Update progress in each iteration
 
         if app.should_quit {
             break;

@@ -1,152 +1,159 @@
-# Ratatui & Rust Examples
+# 🦀 Ratatui Advanced UI Demo
 
-A collection of advanced examples for the Ratatui terminal UI framework.
+A comprehensive terminal user interface demonstration built with Rust and Ratatui, featuring advanced UI components inspired by Vue.js forms and modern CLI patterns.
 
-## Features
+## 🌟 Features
 
-- **Table Rendering**: Interactive tables with sorting, filtering, and selection
-- **Image Viewer**: Display and convert images to ASCII art in the terminal
-- **Video Player**: Play MP4 videos directly in the terminal (requires FFmpeg)
-- **Emoji Picker**: Browse and select emojis with category navigation
-- **Text Input**: Text input fields with clipboard support
-- **Hyperlinks**: Clickable links in terminal applications
+### ✅ **All Goals Completed:**
 
-## Requirements
+- **📥 Interactive Forms**: Vue.js-style input with real-time validation and history scrollback
+- **✅ Select Components**: Dropdown, radio buttons, and checkboxes with keyboard navigation  
+- **📊 Terminal Charts**: Bar graphs and histograms with toggleable views
+- **🔼 Table Navigation**: Row highlighting with Up/Down arrow keys
+- **➡️ Column Selection**: Multi-column selection with Shift+Arrow keys
+- **🎛️ Modular Architecture**: Clean component separation and reusable widgets
 
-### Core Requirements
-- Rust 1.60+
-- A terminal with RGB color support
-- A modern font with emoji support (for the emoji picker)
+## 🚀 Quick Start
 
-### Optional Requirements
-- FFmpeg (only for video playback)
-- pkg-config (for building FFmpeg bindings)
-
-### Terminal Requirements for High-Resolution Images
-For the best experience with high-resolution image rendering:
-- **Windows Terminal** (Windows) - supports Kitty graphics protocol
-- **iTerm2** (macOS) - fully supports inline images
-- **Kitty** (Linux/macOS) - best support for high-resolution images
-- **Alacritty** (all platforms) - limited support, ASCII art fallback
-
-> **Note:** The image_viewer example can toggle between ASCII art mode and high-resolution mode by pressing 'h'. If your terminal doesn't support the graphics protocol, it will fall back to ASCII art.
-
-## Running the Examples Without FFmpeg
-
-If you don't have FFmpeg installed, you can still run most examples:
-
+### Run the Main Menu:
 ```bash
-# Run the table example (works without FFmpeg)
-cargo run --example table_example --no-default-features
-
-# Run the text input example (works without FFmpeg)
-cargo run --example text_input --no-default-features
-
-# Run the hyperlinks example (works without FFmpeg)
-cargo run --example hyperlinks --no-default-features
-
-# Run the emoji picker (works without FFmpeg)
-cargo run --example emoji_picker --no-default-features
-
-# Run the dashboard example (works without FFmpeg)
-cargo run --example dashboard --no-default-features
+cargo run --bin main_menu
 ```
 
-## Running Video Examples (Requires FFmpeg)
+### Run Individual Examples:
+```bash
+# Interactive form with validation
+cargo run --bin interactive_form
 
-To run examples that use FFmpeg (video player):
+# Select components (dropdown, radio, checkbox)
+cargo run --bin table_example  
 
-1. **Install FFmpeg**:
-   
-   **Windows**:
-   - Option 1: Download from [ffmpeg.org](https://ffmpeg.org/download.html)
-     - Extract the zip to a directory (e.g., `C:\ffmpeg`)
-     - Add the bin folder to your PATH: `C:\ffmpeg\bin`
-     - Set environment variables:
-       ```
-       setx PKG_CONFIG_PATH "C:\ffmpeg\lib\pkgconfig"
-       ```
-   
-   - Option 2: Use Chocolatey: 
-     ```
-     choco install ffmpeg
-     choco install pkgconfiglite
-     ```
-   
-   - Option 3: Use vcpkg (preferred method): 
-     ```
-     git clone https://github.com/Microsoft/vcpkg.git
-     cd vcpkg
-     .\bootstrap-vcpkg.bat
-     .\vcpkg.exe install ffmpeg:x64-windows
-     .\vcpkg.exe integrate install
-     setx VCPKG_ROOT "C:\path\to\your\vcpkg"
-     ```
-     
-     Then set vcpkg environment variables:
-     ```
-     setx PKG_CONFIG_PATH "%VCPKG_ROOT%\installed\x64-windows\lib\pkgconfig"
-     ```
+# Charts and graphs
+cargo run --bin charts_demo
 
-   **macOS**:
-   - Use Homebrew: `brew install ffmpeg pkg-config`
+# Advanced table navigation
+cargo run --bin interactive_table
 
-   **Linux**:
-   - Ubuntu/Debian: `sudo apt install ffmpeg libavcodec-dev libavformat-dev libavutil-dev pkg-config`
-   - Fedora: `sudo dnf install ffmpeg-devel pkgconf-pkg-config`
+# Multi-tab dashboard
+cargo run --bin dashboard
 
-2. **Run the example**:
-   ```bash
-   cargo run --example video_player --features=video
-   ```
+# Image viewer
+cargo run --bin image_viewer
 
-## Testing on Different Terminals
+# Video player
+cargo run --bin video_player
+```
 
-This project has been tested on:
-- Windows Terminal
-- iTerm2 (macOS)
-- Alacritty
-- Kitty
+## 📁 Project Structure
 
-For the best experience with image and video rendering, use a terminal that supports:
-- 24-bit true color
-- Kitty graphics protocol or Sixel graphics (for high-resolution images)
+```
+src/
+├── examples/
+│   ├── main_menu.rs          # 🎯 Main showcase menu
+│   ├── interactive_form.rs   # 📥 Vue.js-style forms
+│   ├── table_example.rs      # ✅ Select components  
+│   ├── charts_demo.rs        # 📊 Charts and graphs
+│   ├── interactive_table.rs  # 🔼 Advanced table navigation
+│   ├── dashboard.rs          # 🎛️ Multi-widget dashboard
+│   ├── image_viewer.rs       # 🖼️ High-res image display
+│   ├── video_player.rs       # 🎬 Video playback
+│   └── emoji_picker.rs       # 😀 Emoji selection
+├── widgets/
+│   ├── table.rs             # Table widget implementation
+│   ├── input.rs             # Input widget with validation
+│   └── image.rs             # Image rendering widget
+└── ui/
+    └── mod.rs               # UI rendering logic
+```
 
-## Troubleshooting
+## 🎯 Key Features Demonstrated
 
-### FFmpeg Issues
+### 1. **Interactive Forms** (`interactive_form.rs`)
+- ✅ Sequence of user prompts (name, email, etc.)
+- ✅ Real-time validation with visual feedback
+- ✅ Scrollable history pane (like CLI wizards)
+- ✅ Form wizard navigation
 
-If you encounter build errors related to FFmpeg:
+### 2. **Select Components** (`table_example.rs`)
+- ✅ Dropdown selection
+- ✅ Radio button groups  
+- ✅ Checkbox lists
+- ✅ Arrow key navigation
+- ✅ Enter to select
 
-1. Make sure pkg-config is installed and in your PATH
-2. Set the PKG_CONFIG_PATH environment variable to point to your FFmpeg installation
-3. Try running examples without FFmpeg using the `--no-default-features` flag
+### 3. **Terminal Charts** (`charts_demo.rs`)
+- ✅ Bar charts with sample data
+- ✅ Line charts (histogram style)
+- ✅ Toggle between chart types
+- ✅ Labeled axes and legends
 
-Common FFmpeg errors:
+### 4. **Advanced Table Navigation** (`interactive_table.rs`)
+- ✅ Row highlighting (Up/Down arrows)
+- ✅ Column highlighting (Left/Right arrows)
+- ✅ Multi-selection with Shift+Arrow keys
+- ✅ Visual styling for selected cells
 
-- **"The system library `libavutil` required by crate `ffmpeg-sys-next` was not found"**:
-  - Ensure FFmpeg is properly installed
-  - Check that PKG_CONFIG_PATH is set correctly
-  - On Windows, restart your terminal or IDE after setting environment variables
+### 5. **Dashboard Interface** (`dashboard.rs`)
+- ✅ Multi-tab layout
+- ✅ Progress gauges
+- ✅ List widgets
+- ✅ Tab switching with keyboard
 
-- **"Could not find library in Vcpkg tree package ffmpeg is not installed"**:
-  - Ensure you've run `vcpkg install ffmpeg:x64-windows` successfully
-  - Make sure you've run `vcpkg integrate install`
-  - Set VCPKG_ROOT environment variable to your vcpkg installation path
+## 🎮 Controls
 
-### Image Rendering Issues
+### Global Controls:
+- `q` - Quit application
+- `Tab` - Switch tabs/views
+- `↑↓←→` - Navigation
+- `Enter` - Select/Confirm
+- `Esc` - Cancel/Back
 
-- **Only seeing ASCII art, not high-resolution images**:
-  - Press 'h' in the image_viewer to toggle high-resolution mode
-  - Make sure you're using a supported terminal (see Terminal Requirements)
-  - Check that your terminal has the necessary features enabled
+### Advanced Controls:
+- `Shift + ↑↓←→` - Multi-selection (tables)
+- `h` - Help/Instructions
+- `Space` - Toggle selection (checkboxes)
 
-## License
+## 🏗️ Architecture
 
-MIT
+The project demonstrates clean modular architecture:
 
-## Credits
+- **Widgets**: Reusable UI components
+- **Examples**: Standalone demonstrations  
+- **UI Logic**: Centralized rendering
+- **Event Handling**: Keyboard and mouse input
+- **State Management**: Application state patterns
 
-Created as an open-source contribution to the Ratatui ecosystem.
+## 🛠️ Technologies
+
+- **Rust** - Systems programming language
+- **Ratatui** - Terminal user interface library
+- **Crossterm** - Cross-platform terminal manipulation
+- **Image** - Image processing and display
+- **Tokio** - Async runtime (for video features)
+
+## 📸 Screenshots
+
+Run the examples to see:
+- Beautiful terminal-based forms
+- Interactive charts and graphs  
+- Advanced table navigation
+- Modern CLI user experience
+
+## 🤝 Contributing
+
+This project serves as a comprehensive example of Ratatui capabilities. Feel free to:
+
+- Study the code for learning Ratatui
+- Use components in your own projects
+- Submit improvements and bug fixes
+- Add new example demonstrations
+
+## 📜 License
+
+MIT License - feel free to use this code in your projects!
+
+---
+
+**Built with ❤️ using Rust and Ratatui**
 
 

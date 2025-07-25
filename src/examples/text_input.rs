@@ -120,6 +120,7 @@ impl TextField {
         self.links.sort_by_key(|link| link.start);
     }
 
+    #[allow(dead_code)]    #[allow(dead_code)]
     fn get_link_at_position(&self, pos: usize) -> Option<&Link> {
         self.links.iter().find(|link| pos >= link.start && pos < link.end)
     }

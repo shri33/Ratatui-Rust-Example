@@ -62,6 +62,8 @@ pub struct App {
     pub should_quit: bool,
     /// Current tab index
     pub current_tab: usize,
+    /// Active tab index
+    pub active_tab: usize,
 }
 
 impl Default for App {
@@ -86,6 +88,7 @@ impl App {
             config: Config::default(),
             should_quit: false,
             current_tab: 0,
+            active_tab: 0,
         }
     }
 
