@@ -79,6 +79,10 @@ path = "src/bin/keyboard_test.rs"
 name = "no_filter_test"
 path = "src/bin/no_filter_test.rs"
 
+[[bin]]
+name = "interactive_form_fixed"
+path = "src/bin/interactive_form_fixed.rs"
+
 [dependencies]
 ratatui = "0.28"
 crossterm = "0.28"
