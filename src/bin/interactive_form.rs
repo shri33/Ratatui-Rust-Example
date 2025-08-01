@@ -1,7 +1,7 @@
 use std::io;
 use std::collections::VecDeque;
 use crossterm::{
-    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyModifiers},
+    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyModifiers, KeyEventKind},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -169,7 +169,17 @@ fn ui(f: &mut Frame, app: &App) {
         .split(f.area());
     
     // Title
-    let title = Paragraph::new("Interactive Form Example")
+    let title_text = match app.input_mode {
+        InputMode::Navigation => "Interactive Form - Tab/Arrow keys to navigate, Enter to edit, Q/Esc to quit",
+        InputMode::Editing => &format!("Editing {} - Type to input, Enter/Esc to stop editing", 
+            match app.active_field {
+                InputField::Name => "Name",
+                InputField::Email => "Email", 
+                InputField::Selection => "Selection",
+            }),
+    };
+    
+    let title = Paragraph::new(title_text)
         .style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
         .block(Block::default().borders(Borders::ALL));
     f.render_widget(title, chunks[0]);
@@ -380,21 +390,40 @@ pub fn run_app<B: Backend>(
         terminal.draw(|f| ui(f, &app))?;
         
         if let Event::Key(key) = event::read()? {
+            // Only process key press events, not release events
+            if key.kind != KeyEventKind::Press {
+                continue;
+            }
+            
             match app.input_mode {
                 InputMode::Navigation => match key.code {
-                    KeyCode::Char('q') => return Ok(()),
+                    KeyCode::Char('q') | KeyCode::Esc => return Ok(()),
                     KeyCode::Tab => {
                         app.active_field = match app.active_field {
                             InputField::Name => InputField::Email,
                             InputField::Email => InputField::Selection,
                             InputField::Selection => InputField::Name,
-                    };
+                        };
                     }
                     KeyCode::BackTab => {
                         app.active_field = match app.active_field {
                             InputField::Name => InputField::Selection,
                             InputField::Email => InputField::Name,
                             InputField::Selection => InputField::Email,
+                        };
+                    }
+                    KeyCode::Up => {
+                        app.active_field = match app.active_field {
+                            InputField::Name => InputField::Selection,
+                            InputField::Email => InputField::Name,
+                            InputField::Selection => InputField::Email,
+                        };
+                    }
+                    KeyCode::Down => {
+                        app.active_field = match app.active_field {
+                            InputField::Name => InputField::Email,
+                            InputField::Email => InputField::Selection,
+                            InputField::Selection => InputField::Name,
                         };
                     }
                     KeyCode::Enter => {
@@ -446,12 +475,6 @@ pub fn run_app<B: Backend>(
                             app.move_highlight(KeyCode::Right, key.modifiers.contains(KeyModifiers::SHIFT));
                         }
                     }
-                    KeyCode::Up => {
-                        app.move_highlight(KeyCode::Up, key.modifiers.contains(KeyModifiers::SHIFT));
-                    }
-                    KeyCode::Down => {
-                        app.move_highlight(KeyCode::Down, key.modifiers.contains(KeyModifiers::SHIFT));
-                    }
                     _ => {}
                 },
                 InputMode::Editing => match key.code {
@@ -474,12 +497,16 @@ pub fn run_app<B: Backend>(
                     KeyCode::Backspace => {
                         match app.active_field {
                             InputField::Name => {
-                                app.name.pop();
-                                app.validate_name();
+                                if !app.name.is_empty() {
+                                    app.name.pop();
+                                    app.validate_name();
+                                }
                             }
                             InputField::Email => {
-                                app.email.pop();
-                                app.validate_email();
+                                if !app.email.is_empty() {
+                                    app.email.pop();
+                                    app.validate_email();
+                                }
                             }
                             _ => {}
                         }

@@ -1,0 +1,9 @@
+{
+  "timestamp": "2025-08-01T09:59:01.891801900+00:00",
+  "action": "create_account",
+  "user_data": {
+    "email": "ddd@js.dd",
+    "name": "ss"
+  },
+  "status": "success"
+}

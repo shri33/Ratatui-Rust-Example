@@ -59,6 +59,26 @@ path = "src/examples/charts_demo.rs"
 name = "main_menu"
 path = "src/examples/main_menu.rs"
 
+[[bin]]
+name = "journal_cli"
+path = "src/bin/journal_cli.rs"
+
+[[bin]]
+name = "journal_cli_enhanced"
+path = "src/bin/journal_cli_enhanced.rs"
+
+[[bin]]
+name = "simple_form_test"
+path = "src/bin/simple_form_test.rs"
+
+[[bin]]
+name = "keyboard_test"
+path = "src/bin/keyboard_test.rs"
+
+[[bin]]
+name = "no_filter_test"
+path = "src/bin/no_filter_test.rs"
+
 [dependencies]
 ratatui = "0.28"
 crossterm = "0.28"
@@ -80,6 +100,7 @@ arboard = "3.4"
 log = "0.4"
 toml = "0.8"
 tempfile = "3.8"
+chrono = { version = "0.4", features = ["serde"] }
 
 [features]
 default = []

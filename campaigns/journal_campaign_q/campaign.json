@@ -1,0 +1,13 @@
+{
+  "campaign_name": "Welcome Campaign",
+  "user": {
+    "name": "j",
+    "email": "q@h.dev"
+  },
+  "created_at": "2025-08-01 09:42:47 UTC",
+  "status": "draft",
+  "templates": [
+    "welcome_email.html",
+    "follow_up.html"
+  ]
+}

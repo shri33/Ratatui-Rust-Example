@@ -4,4 +4,4 @@ pub mod input;
 pub mod table;
 
 // Re-export for easier access
-pub use table::{InteractiveTable, TableData, SelectComponent, SelectOption, SelectType};
+pub use table::{InteractiveTable, TableData, SelectComponent, SelectOption, SelectType, create_demo_table};

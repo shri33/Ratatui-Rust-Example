@@ -1,0 +1,9 @@
+{
+  "timestamp": "2025-08-01T09:46:19.154890100+00:00",
+  "action": "create_account",
+  "user_data": {
+    "email": "shri@gev.f",
+    "name": "ag"
+  },
+  "status": "success"
+}
