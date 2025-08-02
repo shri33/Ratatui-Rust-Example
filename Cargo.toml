@@ -8,8 +8,16 @@ name = "tui-image-viewer"
 path = "src/main.rs"
 
 [[bin]]
+name = "test_interactive"
+path = "src/bin/test_interactive.rs"
+
+[[bin]]
 name = "interactive_form"
 path = "src/bin/interactive_form.rs"
+
+[[bin]]
+name = "test_form_basic"
+path = "src/bin/test_form_basic.rs"
 
 [[bin]]
 name = "animation_ascii"
@@ -78,10 +86,6 @@ path = "src/bin/keyboard_test.rs"
 [[bin]]
 name = "no_filter_test"
 path = "src/bin/no_filter_test.rs"
-
-[[bin]]
-name = "interactive_form_fixed"
-path = "src/bin/interactive_form_fixed.rs"
 
 [dependencies]
 ratatui = "0.28"

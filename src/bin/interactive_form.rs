@@ -1,7 +1,7 @@
 use std::io;
 use std::collections::VecDeque;
 use std::fs;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 use crossterm::{
     event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyModifiers},
     execute,
@@ -18,6 +18,9 @@ use ratatui::{
     },
     Frame, Terminal,
 };
+use regex::Regex;
+use serde_json;
+use chrono;
 
 const HISTORY_SIZE: usize = 10;
 
@@ -137,7 +140,7 @@ impl App {
             return;
         }
         
-        let email_regex = regex::Regex::new(r"^[^\s@]+@[^\s@]+\.[^\s@]+$").unwrap();
+        let email_regex = Regex::new(r"^[^\s@]+@[^\s@]+\.[^\s@]+$").unwrap();
         let basic_valid = email_regex.is_match(&self.email);
         
         // Additional checks for common issues
@@ -809,10 +812,9 @@ pub fn run_app<B: Backend>(
         
         terminal.draw(|f| ui(f, &app))?;
         
-        // Handle events with timeout for loading updates
-        if event::poll(Duration::from_millis(100))? {
+        // Handle events with proper polling
+        if event::poll(std::time::Duration::from_millis(100))? {
             if let Event::Key(key) = event::read()? {
-                // FIXED: Removed KeyEventKind filtering that was blocking input
                 match app.input_mode {
                     InputMode::Navigation => match key.code {
                         KeyCode::Char('q') | KeyCode::Esc => return Ok(()),
