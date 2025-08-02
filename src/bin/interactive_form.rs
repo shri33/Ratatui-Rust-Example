@@ -2,6 +2,7 @@ use std::io;
 use std::collections::VecDeque;
 use std::fs;
 use std::time::Instant;
+use std::process::{Command, Stdio};
 use crossterm::{
     event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyModifiers},
     execute,
@@ -23,12 +24,17 @@ use serde_json;
 use chrono;
 
 const HISTORY_SIZE: usize = 10;
+const COMMAND_HISTORY_SIZE: usize = 50;
+const SPINNER_FRAMES: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 
 #[derive(PartialEq, Copy, Clone)]
 enum InputMode {
     Navigation,
     Editing,
     Generating, // For loading states
+    FileExplorer, // For file operations
+    #[allow(dead_code)]
+    ExternalCommand, // For external command execution
 }
 
 #[derive(PartialEq, Copy, Clone)]
@@ -45,6 +51,21 @@ enum SelectOption {
     No,
     Maybe,
     Other,
+}
+
+#[derive(Clone)]
+struct ValidationError {
+    field: String,
+    message: String,
+    timestamp: Instant,
+}
+
+#[derive(Clone)]
+struct LoadingState {
+    progress: u16,
+    message: String,
+    spinner_frame: usize,
+    start_time: Instant,
 }
 
 struct App {
@@ -68,10 +89,29 @@ struct App {
     campaign_generated: bool,
     show_image_placeholder: bool,
     last_generation_time: Option<Instant>,
-    // Command history for shell-like experience
+    // Enhanced command history for shell-like experience
     command_history: VecDeque<String>,
+    name_history: VecDeque<String>,
+    email_history: VecDeque<String>,
     history_index: Option<usize>,
     current_input_backup: String,
+    // Enhanced validation
+    validation_errors: Vec<ValidationError>,
+    email_error_message: String,
+    name_error_message: String,
+    // Enhanced loading and CLI states
+    loading_state: Option<LoadingState>,
+    #[allow(dead_code)]
+    external_command_output: String,
+    file_explorer_path: String,
+    // Multi-selection enhancements
+    selection_start_row: Option<usize>,
+    selection_start_col: Option<usize>,
+    is_selecting: bool,
+    // Platform detection
+    is_windows: bool,
+    is_macos: bool,
+    is_linux: bool,
 }
 
 impl Default for App {
@@ -126,17 +166,34 @@ impl Default for App {
             show_image_placeholder: true,
             last_generation_time: None,
             command_history: VecDeque::new(),
+            name_history: VecDeque::new(),
+            email_history: VecDeque::new(),
             history_index: None,
             current_input_backup: String::new(),
+            validation_errors: Vec::new(),
+            email_error_message: String::new(),
+            name_error_message: String::new(),
+            loading_state: None,
+            external_command_output: String::new(),
+            file_explorer_path: std::env::current_dir().unwrap_or_default().to_string_lossy().to_string(),
+            selection_start_row: None,
+            selection_start_col: None,
+            is_selecting: false,
+            is_windows: cfg!(target_os = "windows"),
+            is_macos: cfg!(target_os = "macos"),
+            is_linux: cfg!(target_os = "linux"),
         }
     }
 }
 
 impl App {
     fn validate_email(&mut self) {
-        // Enhanced email validation with detailed feedback
+        // Enhanced email validation with detailed feedback and error blocking
+        self.email_error_message.clear();
+        
         if self.email.is_empty() {
             self.email_valid = false;
+            self.email_error_message = "Email is required".to_string();
             return;
         }
         
@@ -149,8 +206,43 @@ impl App {
         let starts_with_at = self.email.starts_with('@');
         let ends_with_dot = self.email.ends_with('.');
         let multiple_at = self.email.matches('@').count() > 1;
+        let too_short = self.email.len() < 5;
+        let has_spaces = self.email.contains(' ');
         
-        self.email_valid = basic_valid && has_at && has_dot && !starts_with_at && !ends_with_dot && !multiple_at;
+        self.email_valid = basic_valid && has_at && has_dot && !starts_with_at && !ends_with_dot && !multiple_at && !too_short && !has_spaces;
+        
+        // Set detailed error message for blocking progression
+        if !self.email_valid {
+            self.email_error_message = if has_spaces {
+                "Email cannot contain spaces".to_string()
+            } else if too_short {
+                "Email must be at least 5 characters".to_string()
+            } else if !has_at {
+                "Email must contain @ symbol".to_string()
+            } else if !has_dot {
+                "Email must contain domain (.com, .org, etc.)".to_string()
+            } else if starts_with_at {
+                "Email cannot start with @".to_string()
+            } else if ends_with_dot {
+                "Email cannot end with .".to_string()
+            } else if multiple_at {
+                "Email cannot contain multiple @ symbols".to_string()
+            } else {
+                "Invalid email format (example: user@domain.com)".to_string()
+            };
+            
+            // Add validation error with timestamp
+            self.validation_errors.push(ValidationError {
+                field: "email".to_string(),
+                message: self.email_error_message.clone(),
+                timestamp: Instant::now(),
+            });
+            
+            // Keep only recent errors (last 5)
+            if self.validation_errors.len() > 5 {
+                self.validation_errors.remove(0);
+            }
+        }
         
         // Add validation feedback to history
         if !self.email.is_empty() && !self.email_valid {
@@ -177,13 +269,44 @@ impl App {
     }
     
     fn validate_name(&mut self) {
+        // Enhanced name validation with detailed feedback and error blocking
+        self.name_error_message.clear();
         let trimmed = self.name.trim();
         let was_valid = self.name_valid;
-        self.name_valid = !trimmed.is_empty() && trimmed.len() >= 2;
+        
+        if trimmed.is_empty() {
+            self.name_valid = false;
+            self.name_error_message = "Name is required".to_string();
+        } else if trimmed.len() < 2 {
+            self.name_valid = false;
+            self.name_error_message = "Name must be at least 2 characters".to_string();
+        } else if trimmed.len() > 50 {
+            self.name_valid = false;
+            self.name_error_message = "Name must be less than 50 characters".to_string();
+        } else if !trimmed.chars().all(|c| c.is_alphabetic() || c.is_whitespace() || c == '-' || c == '\'') {
+            self.name_valid = false;
+            self.name_error_message = "Name can only contain letters, spaces, hyphens, and apostrophes".to_string();
+        } else {
+            self.name_valid = true;
+        }
+        
+        // Add validation error with timestamp if invalid
+        if !self.name_valid && !self.name_error_message.is_empty() {
+            self.validation_errors.push(ValidationError {
+                field: "name".to_string(),
+                message: self.name_error_message.clone(),
+                timestamp: Instant::now(),
+            });
+            
+            // Keep only recent errors (last 5)
+            if self.validation_errors.len() > 5 {
+                self.validation_errors.remove(0);
+            }
+        }
         
         // Add validation feedback to history
         if !self.name.is_empty() && !self.name_valid && was_valid != self.name_valid {
-            self.add_to_history("✗ Name must be at least 2 characters".to_string());
+            self.add_to_history(format!("✗ Name: {}", self.name_error_message));
         } else if self.name_valid && was_valid != self.name_valid {
             self.add_to_history("✓ Name is valid".to_string());
         }
@@ -191,11 +314,33 @@ impl App {
     
     fn add_to_command_history(&mut self, command: String) {
         if !command.trim().is_empty() && !self.command_history.contains(&command) {
-            self.command_history.push_front(command);
-            if self.command_history.len() > 20 {
+            self.command_history.push_front(command.clone());
+            if self.command_history.len() > COMMAND_HISTORY_SIZE {
                 self.command_history.pop_back();
             }
         }
+        
+        // Also add to field-specific history
+        match self.active_field {
+            InputField::Name => {
+                if !self.name_history.contains(&command) {
+                    self.name_history.push_front(command);
+                    if self.name_history.len() > 20 {
+                        self.name_history.pop_back();
+                    }
+                }
+            },
+            InputField::Email => {
+                if !self.email_history.contains(&command) {
+                    self.email_history.push_front(command);
+                    if self.email_history.len() > 20 {
+                        self.email_history.pop_back();
+                    }
+                }
+            },
+            _ => {}
+        }
+        
         self.history_index = None;
         self.current_input_backup.clear();
     }
@@ -332,6 +477,7 @@ impl App {
         }
     }
 
+    #[allow(dead_code)]
     fn start_campaign_generation(&mut self) {
         self.input_mode = InputMode::Generating;
         self.show_loading = true;
@@ -397,6 +543,174 @@ impl App {
         let readme_file = format!("{}/README.md", campaign_dir);
         let _ = fs::write(readme_file, readme_content);
     }
+
+    fn launch_file_explorer(&mut self) {
+        let result = if self.is_windows {
+            Command::new("explorer")
+                .arg(&self.file_explorer_path)
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn()
+        } else if self.is_macos {
+            Command::new("open")
+                .arg(&self.file_explorer_path)
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn()
+        } else if self.is_linux {
+            // Try common Linux file managers
+            Command::new("xdg-open")
+                .arg(&self.file_explorer_path)
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn()
+                .or_else(|_| {
+                    Command::new("nautilus")
+                        .arg(&self.file_explorer_path)
+                        .stdout(Stdio::null())
+                        .stderr(Stdio::null())
+                        .spawn()
+                })
+                .or_else(|_| {
+                    Command::new("thunar")
+                        .arg(&self.file_explorer_path)
+                        .stdout(Stdio::null())
+                        .stderr(Stdio::null())
+                        .spawn()
+                })
+        } else {
+            Err(std::io::Error::new(std::io::ErrorKind::Other, "Unsupported platform"))
+        };
+
+        match result {
+            Ok(_) => {
+                self.add_to_history(format!("✓ Opened file explorer: {}", self.file_explorer_path));
+            }
+            Err(e) => {
+                self.add_to_history(format!("✗ Failed to open file explorer: {}", e));
+            }
+        }
+    }
+
+    fn update_loading_spinner(&mut self) {
+        if let Some(loading) = &mut self.loading_state {
+            let elapsed = loading.start_time.elapsed();
+            loading.spinner_frame = ((elapsed.as_millis() / 100) % SPINNER_FRAMES.len() as u128) as usize;
+            
+            // Update progress based on elapsed time
+            let progress_percent = (elapsed.as_millis() as f32 / 3000.0 * 100.0) as u16;
+            loading.progress = progress_percent.min(100);
+            
+            if loading.progress >= 100 {
+                self.loading_state = None;
+                self.show_loading = false;
+                self.campaign_generated = true;
+                self.input_mode = InputMode::Navigation;
+                self.create_campaign_files();
+                self.add_to_history("✓ Campaign files generated successfully!".to_string());
+            }
+        }
+    }
+
+    fn start_enhanced_loading(&mut self, message: String) {
+        self.loading_state = Some(LoadingState {
+            progress: 0,
+            message,
+            spinner_frame: 0,
+            start_time: Instant::now(),
+        });
+        self.input_mode = InputMode::Generating;
+        self.show_loading = true;
+    }
+
+    #[allow(dead_code)]
+    fn execute_external_command(&mut self, command: &str, args: &[&str]) {
+        self.input_mode = InputMode::ExternalCommand;
+        
+        let result = if self.is_windows {
+            Command::new("cmd")
+                .args(&["/C", command])
+                .args(args)
+                .output()
+        } else {
+            Command::new(command)
+                .args(args)
+                .output()
+        };
+
+        match result {
+            Ok(output) => {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                self.external_command_output = format!("STDOUT:\n{}\nSTDERR:\n{}", stdout, stderr);
+                self.add_to_history(format!("✓ Executed: {} {}", command, args.join(" ")));
+            }
+            Err(e) => {
+                self.external_command_output = format!("Error executing command: {}", e);
+                self.add_to_history(format!("✗ Failed to execute: {} {}", command, args.join(" ")));
+            }
+        }
+        
+        self.input_mode = InputMode::Navigation;
+    }
+
+    fn enhanced_multi_select(&mut self, direction: KeyCode, with_shift: bool, with_ctrl: bool) {
+        if with_ctrl && !with_shift {
+            // Start new selection
+            self.selection_start_row = Some(self.selected_table_row);
+            self.selection_start_col = Some(self.selected_table_col);
+            self.is_selecting = true;
+            self.highlighted_rows = vec![self.selected_table_row];
+            self.highlighted_cols = vec![self.selected_table_col];
+            return;
+        }
+
+        if with_shift && self.is_selecting {
+            // Extend selection
+            if let (Some(start_row), Some(start_col)) = (self.selection_start_row, self.selection_start_col) {
+                let min_row = start_row.min(self.selected_table_row);
+                let max_row = start_row.max(self.selected_table_row);
+                let min_col = start_col.min(self.selected_table_col);
+                let max_col = start_col.max(self.selected_table_col);
+                
+                self.highlighted_rows = (min_row..=max_row).collect();
+                self.highlighted_cols = (min_col..=max_col).collect();
+                
+                self.add_to_history(format!("Selected region: {}×{} cells", 
+                    max_row - min_row + 1, max_col - min_col + 1));
+            }
+        }
+
+        // Normal movement
+        self.move_table_selection(direction, with_shift);
+    }
+
+    fn clear_validation_errors(&mut self) {
+        self.validation_errors.clear();
+        self.email_error_message.clear();
+        self.name_error_message.clear();
+        
+        // Log cleared errors for debugging
+        self.add_to_history("Validation errors cleared".to_string());
+    }
+
+    fn can_proceed(&self) -> bool {
+        self.name_valid && self.email_valid && self.validation_errors.is_empty()
+    }
+
+    #[allow(dead_code)]
+    fn get_validation_summary(&self) -> String {
+        if self.validation_errors.is_empty() {
+            "No validation errors".to_string()
+        } else {
+            let errors: Vec<String> = self.validation_errors
+                .iter()
+                .map(|err| format!("{}: {} ({})", err.field, err.message, 
+                    err.timestamp.elapsed().as_secs()))
+                .collect();
+            format!("Validation errors: {}", errors.join(", "))
+        }
+    }
 }
 
 fn ui(f: &mut Frame, app: &App) {
@@ -440,6 +754,8 @@ fn ui(f: &mut Frame, app: &App) {
             instructions
         },
         InputMode::Generating => "Generating campaign files... Press Q/Esc to quit".to_string(),
+        InputMode::FileExplorer => format!("File Explorer - Current path: {} | Enter to select, Esc to return", app.file_explorer_path),
+        InputMode::ExternalCommand => "Executing external command... Press Q/Esc to return".to_string(),
     };
     
     let title = Paragraph::new(title_text.as_str())
@@ -474,6 +790,8 @@ fn ui(f: &mut Frame, app: &App) {
     let name_validation = if !app.name.is_empty() {
         if app.name_valid {
             " ✓"
+        } else if !app.name_error_message.is_empty() {
+            &format!(" ✗ {}", app.name_error_message)
         } else {
             " ✗ Name must be at least 2 characters"
         }
@@ -517,8 +835,10 @@ fn ui(f: &mut Frame, app: &App) {
     let email_validation = if !app.email.is_empty() {
         if app.email_valid {
             " ✓ Valid email"
+        } else if !app.email_error_message.is_empty() {
+            &format!(" ✗ {}", app.email_error_message)
         } else {
-            // Detailed validation feedback
+            // Fallback detailed validation feedback
             if !app.email.contains('@') {
                 " ✗ Missing @ symbol"
             } else if !app.email.contains('.') {
@@ -584,41 +904,65 @@ fn ui(f: &mut Frame, app: &App) {
     );
     f.render_widget(tabs, chunks[3]);
 
-    // Actions section with enhanced feedback
-    let actions_text = if app.name_valid && app.email_valid {
-        format!("✓ Ready! Space=generate files | G=toggle image | Ctrl+A=select all rows | Ctrl+C=clear selection")
+    // Actions section with enhanced feedback and blocking
+    let actions_text = if app.can_proceed() {
+        format!("✓ Ready! Space=generate files | E=file explorer | Ctrl+A=select all | F1=help")
     } else {
         let mut issues = Vec::new();
-        if !app.name_valid {
-            issues.push("name");
+        if !app.name_valid && !app.name_error_message.is_empty() {
+            issues.push(format!("Name: {}", app.name_error_message));
+        } else if !app.name_valid {
+            issues.push("name".to_string());
         }
-        if !app.email_valid {
-            issues.push("email");
+        if !app.email_valid && !app.email_error_message.is_empty() {
+            issues.push(format!("Email: {}", app.email_error_message));
+        } else if !app.email_valid {
+            issues.push("email".to_string());
         }
-        format!("⚠ Complete {} to enable generation | G=toggle image", issues.join(" & "))
+        
+        if issues.is_empty() {
+            "Complete required fields to proceed".to_string()
+        } else {
+            format!("⚠ Fix: {} | Generation blocked until resolved", issues.join(" | "))
+        }
     };
     
     let actions = Paragraph::new(actions_text)
-        .style(if app.name_valid && app.email_valid {
+        .style(if app.can_proceed() {
             Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)
         } else {
-            Style::default().fg(Color::Yellow)
+            Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)
         })
         .block(Block::default().title("Actions & Status").borders(Borders::ALL));
     f.render_widget(actions, chunks[4]);
 
-    // Loading indicator
+    // Enhanced loading indicator with spinner
     if app.show_loading {
         let loading_area = Layout::default()
             .direction(Direction::Vertical)
             .constraints([Constraint::Min(0), Constraint::Length(3), Constraint::Min(0)].as_ref())
             .split(f.area())[1];
         
+        let (title, progress, spinner) = if let Some(loading) = &app.loading_state {
+            let spinner_char = SPINNER_FRAMES[loading.spinner_frame];
+            (
+                format!("{} {}", spinner_char, loading.message),
+                loading.progress,
+                spinner_char.to_string()
+            )
+        } else {
+            (
+                "Generating Campaign".to_string(),
+                app.loading_progress,
+                "⏳".to_string()
+            )
+        };
+        
         let gauge = Gauge::default()
-            .block(Block::default().title("Generating Campaign").borders(Borders::ALL))
+            .block(Block::default().title(title).borders(Borders::ALL))
             .gauge_style(Style::default().fg(Color::Cyan))
-            .percent(app.loading_progress)
-            .label(format!("{}%", app.loading_progress));
+            .percent(progress)
+            .label(format!("{}% {}", progress, spinner));
         
         f.render_widget(Clear, loading_area);
         f.render_widget(gauge, loading_area);
@@ -805,8 +1149,10 @@ pub fn run_app<B: Backend>(
     let mut app = App::default();
     
     loop {
-        // Update loading progress if generating
-        if app.show_loading {
+        // Update loading progress and spinner if generating
+        if app.show_loading && app.loading_state.is_some() {
+            app.update_loading_spinner();
+        } else if app.show_loading {
             app.update_loading();
         }
         
@@ -836,7 +1182,9 @@ pub fn run_app<B: Backend>(
                         }
                         KeyCode::Up => {
                             if app.active_field == InputField::Table {
-                                app.move_table_selection(KeyCode::Up, key.modifiers.contains(KeyModifiers::SHIFT));
+                                app.enhanced_multi_select(KeyCode::Up, 
+                                    key.modifiers.contains(KeyModifiers::SHIFT),
+                                    key.modifiers.contains(KeyModifiers::CONTROL));
                             } else {
                                 app.active_field = match app.active_field {
                                     InputField::Name => InputField::Table,
@@ -848,7 +1196,9 @@ pub fn run_app<B: Backend>(
                         }
                         KeyCode::Down => {
                             if app.active_field == InputField::Table {
-                                app.move_table_selection(KeyCode::Down, key.modifiers.contains(KeyModifiers::SHIFT));
+                                app.enhanced_multi_select(KeyCode::Down, 
+                                    key.modifiers.contains(KeyModifiers::SHIFT),
+                                    key.modifiers.contains(KeyModifiers::CONTROL));
                             } else {
                                 app.active_field = match app.active_field {
                                     InputField::Name => InputField::Email,
@@ -903,8 +1253,10 @@ pub fn run_app<B: Backend>(
                             }
                         }
                         KeyCode::Char(' ') => {
-                            if app.name_valid && app.email_valid && !app.show_loading {
-                                app.start_campaign_generation();
+                            if app.can_proceed() && !app.show_loading {
+                                app.start_enhanced_loading("Generating campaign files...".to_string());
+                            } else if !app.can_proceed() {
+                                app.add_to_history("✗ Fix validation errors before generating".to_string());
                             }
                         }
                         KeyCode::Char('c') => {
@@ -926,6 +1278,17 @@ pub fn run_app<B: Backend>(
                             app.show_image_placeholder = !app.show_image_placeholder;
                             app.add_to_history(format!("Image display {}", 
                                 if app.show_image_placeholder { "enabled" } else { "disabled" }));
+                        }
+                        KeyCode::Char('e') | KeyCode::Char('E') => {
+                            app.input_mode = InputMode::FileExplorer;
+                            app.add_to_history("File explorer mode - Enter to launch, Esc to return".to_string());
+                        }
+                        KeyCode::F(1) => {
+                            app.add_to_history("Help: Tab=navigate, Enter=edit, Space=generate, E=explorer, G=image, Q=quit".to_string());
+                        }
+                        KeyCode::F(5) => {
+                            app.clear_validation_errors();
+                            app.add_to_history("Validation errors cleared".to_string());
                         }
                         _ => {}
                     },
@@ -988,6 +1351,27 @@ pub fn run_app<B: Backend>(
                         // Block input during generation except for quit
                         if let KeyCode::Char('q') | KeyCode::Esc = key.code {
                             return Ok(());
+                        }
+                    },
+                    InputMode::FileExplorer => {
+                        match key.code {
+                            KeyCode::Char('q') | KeyCode::Esc => {
+                                app.input_mode = InputMode::Navigation;
+                            },
+                            KeyCode::Enter => {
+                                // Launch file explorer for current platform
+                                app.launch_file_explorer();
+                                app.input_mode = InputMode::Navigation;
+                            },
+                            _ => {}
+                        }
+                    },
+                    InputMode::ExternalCommand => {
+                        match key.code {
+                            KeyCode::Char('q') | KeyCode::Esc => {
+                                app.input_mode = InputMode::Navigation;
+                            },
+                            _ => {}
                         }
                     }
                 }

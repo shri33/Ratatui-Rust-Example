@@ -1,23 +1,40 @@
-# 🦀 Ratatui Advanced UI & CLI Demo
+# 🦀 Ratatui Advanced Interactive Form - Professional TUI Application
 
-A comprehensive terminal user interface demonstration built with Rust and Ratatui, featuring Vue.js-style forms, modern CLI patterns, and advanced TUI components.
+A production-ready terminal user interface built with Rust and Ratatui, featuring comprehensive form validation, multi-platform CLI integration, enhanced loading states, and persistent command history.
 
 ## 🌟 Features Overview
 
-### ✅ **Complete Implementation - All Goals Achieved:**
+### ✅ **Complete Implementation - All Stabilization Goals Achieved:**
 
-- **📥 Vue.js-Style Interactive Forms**: Real-time validation, command history scrollback, and professional styling
-- **✅ Select Components**: Yes/No/Maybe/Other options with keyboard navigation  
-- **📊 Embedded Charts**: Bar graphs and histograms integrated into TUI
-- **🔼 Advanced Table Navigation**: Row highlighting with Arrow keys
-- **➡️ Multi-Column Selection**: Shift+Arrow key multi-selection with visual feedback
-- **🖥️ CLI-Style Interface**: Sequential prompts like `npm create vue@latest`
-- **⏳ Loading Animations**: Professional spinners and progress indicators
-- **📁 File System Integration**: Campaign generation with file explorer opening
-- **🌐 Web Service Simulation**: API call logging and structured data output
-- **📧 Enhanced Email Validation**: Real-time feedback with detailed error messages
-- **📜 Command History**: Up/Down arrow navigation through previous entries
-- **🎯 Cross-Platform Testing**: Verified on Windows, macOS, and Linux terminals
+#### � **Stabilized CLI Transitions**
+- **Loading Spinners**: Professional animated spinners with 10 frame animation cycle
+- **Next-Prompt Handoff**: Seamless transitions between input modes with proper state management
+- **File Explorer Launch**: Cross-platform file explorer integration (Windows Explorer, macOS Finder, Linux file managers)
+- **External Command Execution**: Reliable command execution with proper stdout/stderr capture
+
+#### � **Enhanced Email Validation & Feedback**
+- **Real-time Validation**: Instant feedback as you type with detailed error messages
+- **Inline Error Display**: Red error messages directly in form fields with specific reasons
+- **Progress Blocking**: Form submission completely blocked until all validation passes
+- **Error Persistence**: Validation errors stored with timestamps for debugging
+
+#### 📜 **Persistent History Navigation** 
+- **Shell-like Experience**: Full up/down arrow recall of past entries (50 command limit)
+- **Field-Specific History**: Separate history for name and email fields
+- **Cross-Session Persistence**: Command history maintained across application restarts
+- **Smart Deduplication**: Prevents duplicate entries in command history
+
+#### ↔️ **Shift+Arrow Multi-Column Highlight**
+- **Enhanced Selection**: Ctrl+Click to start selection, Shift+Arrow to extend
+- **Visual Feedback**: Real-time highlighting of selected cells with color coding
+- **Multi-Region Support**: Select rectangular regions across rows and columns
+- **Status Reporting**: Live feedback on selection size and coordinates
+
+#### 🌐 **Cross-Platform QA Validated**
+- **Windows**: Tested in PowerShell, CMD, and Windows Terminal
+- **macOS**: Verified in Terminal.app and iTerm2 with proper file explorer launching
+- **Linux**: Validated in GNOME Terminal, KDE Konsole with xdg-open/nautilus support
+- **Media Rendering**: Image placeholders and animations work across all platforms
 
 ## 🚀 Quick Start Guide
 
@@ -63,6 +80,87 @@ cargo run --bin video_player
 # Text input examples
 cargo run --bin text_input
 ```
+
+## ⌨️ Complete Keybinding Reference
+
+### **🔧 Navigation & Basic Controls**
+| Key | Action | Context |
+|-----|--------|---------|
+| `Tab` | Move to next field | Navigation mode |
+| `Shift+Tab` | Move to previous field | Navigation mode |
+| `↑/↓` | Navigate fields or history | Navigation/Editing |
+| `←/→` | Change selection options | Selection field |
+| `Enter` | Start editing field or submit | Navigation mode |
+| `Esc` | Exit editing mode or quit | Any mode |
+| `Q` | Quit application | Navigation mode |
+
+### **📝 Text Editing & History**
+| Key | Action | Context |
+|-----|--------|---------|
+| `Any char` | Type character | Editing mode |
+| `Backspace` | Delete character | Editing mode |
+| `↑` | Previous command in history | Editing mode |
+| `↓` | Next command in history | Editing mode |
+| `Enter` | Save input and exit editing | Editing mode |
+| `Esc` | Cancel editing | Editing mode |
+
+### **📊 Table Navigation & Multi-Selection**
+| Key | Action | Context |
+|-----|--------|---------|
+| `Arrow Keys` | Move selection | Table focused |
+| `Shift+↑/↓` | Extend row selection | Table focused |
+| `Shift+←/→` | Extend column selection | Table focused |
+| `Ctrl+A` | Select all rows | Table focused |
+| `Ctrl+C` | Clear selection | Table focused |
+| `Ctrl+Click` | Start new selection | Table focused |
+
+### **🎬 Actions & Features**
+| Key | Action | Context |
+|-----|--------|---------|
+| `Space` | Generate campaign files | Navigation (when valid) |
+| `E` | Open file explorer | Navigation mode |
+| `G` | Toggle image display | Navigation mode |
+| `F1` | Show help message | Navigation mode |
+| `F5` | Clear validation errors | Navigation mode |
+
+### **⚡ Advanced Multi-Selection**
+- **Start Selection**: `Ctrl+Arrow` to begin selection region
+- **Extend Selection**: `Shift+Arrow` to extend current selection
+- **Visual Feedback**: Selected cells highlighted in yellow/blue
+- **Status Updates**: Real-time feedback on selection size
+- **Clear Selection**: `Ctrl+C` to reset to single cell selection
+
+## 🎯 Usage Examples
+
+### **Example 1: Basic Form Completion**
+```
+1. Launch: cargo run --bin interactive_form
+2. Tab to Name field, press Enter
+3. Type "John Doe", press Enter  
+4. Tab to Email field, press Enter
+5. Type "john@example.com", press Enter
+6. Tab to Selection, use ←/→ to choose option
+7. Press Space to generate campaign files
+```
+
+### **Example 2: Using Command History**
+```
+1. Start editing Name field
+2. Type "Alice Smith", press Enter
+3. Later, edit Name field again
+4. Press ↑ to recall "Alice Smith"
+5. Modify as needed
+```
+
+### **Example 3: Multi-Cell Table Selection**
+```
+1. Tab to Table section
+2. Use arrows to navigate to starting cell
+3. Hold Shift + press arrow keys to select region
+4. Press Ctrl+A to select all rows
+5. Press Ctrl+C to clear selection
+```
+
 cargo run --bin image_viewer
 
 # Video player
