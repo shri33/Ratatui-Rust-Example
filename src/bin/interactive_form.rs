@@ -26,15 +26,32 @@ use chrono;
 const HISTORY_SIZE: usize = 10;
 const COMMAND_HISTORY_SIZE: usize = 50;
 const SPINNER_FRAMES: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+#[allow(dead_code)]
+const TRANSITION_DELAY_MS: u64 = 150;
 
-#[derive(PartialEq, Copy, Clone)]
+#[derive(PartialEq, Copy, Clone, Debug)]
 enum InputMode {
     Navigation,
     Editing,
     Generating, // For loading states
+    #[allow(dead_code)]
+    GenerationComplete, // Transition state after generation
     FileExplorer, // For file operations
     #[allow(dead_code)]
     ExternalCommand, // For external command execution
+}
+
+#[derive(PartialEq, Copy, Clone, Debug)]
+enum TransitionState {
+    Stable,
+    #[allow(dead_code)]
+    LoadingToPrompt,
+    #[allow(dead_code)]
+    PromptToFileExplorer,
+    #[allow(dead_code)]
+    FileExplorerLaunching,
+    #[allow(dead_code)]
+    Complete,
 }
 
 #[derive(PartialEq, Copy, Clone)]
@@ -104,10 +121,23 @@ struct App {
     #[allow(dead_code)]
     external_command_output: String,
     file_explorer_path: String,
-    // Multi-selection enhancements
+    // Transition management
+    #[allow(dead_code)]
+    transition_state: TransitionState,
+    #[allow(dead_code)]
+    transition_start_time: Option<Instant>,
+    #[allow(dead_code)]
+    next_prompt_ready: bool,
+    // Multi-selection enhancements with shift tracking
     selection_start_row: Option<usize>,
     selection_start_col: Option<usize>,
     is_selecting: bool,
+    #[allow(dead_code)]
+    shift_pressed: bool,
+    #[allow(dead_code)]
+    selection_anchor_row: Option<usize>,
+    #[allow(dead_code)]
+    selection_anchor_col: Option<usize>,
     // Platform detection
     is_windows: bool,
     is_macos: bool,
@@ -176,9 +206,15 @@ impl Default for App {
             loading_state: None,
             external_command_output: String::new(),
             file_explorer_path: std::env::current_dir().unwrap_or_default().to_string_lossy().to_string(),
+            transition_state: TransitionState::Stable,
+            transition_start_time: None,
+            next_prompt_ready: false,
             selection_start_row: None,
             selection_start_col: None,
             is_selecting: false,
+            shift_pressed: false,
+            selection_anchor_row: None,
+            selection_anchor_col: None,
             is_windows: cfg!(target_os = "windows"),
             is_macos: cfg!(target_os = "macos"),
             is_linux: cfg!(target_os = "linux"),
@@ -754,6 +790,7 @@ fn ui(f: &mut Frame, app: &App) {
             instructions
         },
         InputMode::Generating => "Generating campaign files... Press Q/Esc to quit".to_string(),
+        InputMode::GenerationComplete => "✓ Generation Complete! Press Enter to open file explorer or Esc to continue".to_string(),
         InputMode::FileExplorer => format!("File Explorer - Current path: {} | Enter to select, Esc to return", app.file_explorer_path),
         InputMode::ExternalCommand => "Executing external command... Press Q/Esc to return".to_string(),
     };
@@ -1362,6 +1399,20 @@ pub fn run_app<B: Backend>(
                                 // Launch file explorer for current platform
                                 app.launch_file_explorer();
                                 app.input_mode = InputMode::Navigation;
+                            },
+                            _ => {}
+                        }
+                    },
+                    InputMode::GenerationComplete => {
+                        match key.code {
+                            KeyCode::Enter => {
+                                app.input_mode = InputMode::FileExplorer;
+                            },
+                            KeyCode::Esc => {
+                                app.input_mode = InputMode::Navigation;
+                            },
+                            KeyCode::Char('q') => {
+                                return Ok(());
                             },
                             _ => {}
                         }

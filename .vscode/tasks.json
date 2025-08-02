@@ -34,7 +34,9 @@
             "type": "shell",
             "command": "cargo",
             "args": [
-                "run"
+                "run",
+                "--bin",
+                "interactive_form"
             ],
             "group": {
                 "kind": "test",
